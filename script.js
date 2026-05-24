@@ -96,6 +96,50 @@ function validateForm(data) {
   return valid;
 }
 
+function submitViaGoogleScript(endpoint, data) {
+  return new Promise((resolve, reject) => {
+    const iframeName = "gas-form-frame";
+    let iframe = document.querySelector(`iframe[name="${iframeName}"]`);
+
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.name = iframeName;
+      iframe.hidden = true;
+      document.body.appendChild(iframe);
+    }
+
+    const hiddenForm = document.createElement("form");
+    hiddenForm.method = "POST";
+    hiddenForm.action = endpoint;
+    hiddenForm.target = iframeName;
+    hiddenForm.style.display = "none";
+
+    const payloadInput = document.createElement("input");
+    payloadInput.type = "hidden";
+    payloadInput.name = "payload";
+    payloadInput.value = JSON.stringify(data);
+    hiddenForm.appendChild(payloadInput);
+
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      resolve();
+    }, 4000);
+
+    function cleanup() {
+      window.clearTimeout(timeoutId);
+      hiddenForm.remove();
+    }
+
+    iframe.addEventListener("load", () => {
+      cleanup();
+      resolve();
+    }, { once: true });
+
+    document.body.appendChild(hiddenForm);
+    hiddenForm.submit();
+  });
+}
+
 form?.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearErrors();
@@ -119,13 +163,7 @@ form?.addEventListener("submit", async (event) => {
     const useGoogleScript = Boolean(window.FORM_ENDPOINT);
 
     if (useGoogleScript) {
-      // Google Script не отдаёт CORS — отправляем как text/plain без чтения ответа
-      await fetch(endpoint, {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(data),
-      });
+      await submitViaGoogleScript(endpoint, data);
     } else {
       const response = await fetch(endpoint, {
         method: "POST",
