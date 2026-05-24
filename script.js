@@ -115,27 +115,50 @@ form?.addEventListener("submit", async (event) => {
   submitBtn.textContent = "Отправка...";
 
   try {
-    const response = await fetch("/api/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
+    const endpoint = window.FORM_ENDPOINT || "/api/submit";
+    const useGoogleScript = Boolean(window.FORM_ENDPOINT);
 
-    const result = await response.json();
+    if (useGoogleScript) {
+      // Google Script не отдаёт CORS — отправляем как text/plain без чтения ответа
+      await fetch(endpoint, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(data),
+      });
+    } else {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
 
-    if (!response.ok || !result.ok) {
-      throw new Error(result.error || "Не удалось отправить заявку");
+      const raw = await response.text();
+      let result = null;
+
+      try {
+        result = raw ? JSON.parse(raw) : null;
+      } catch {
+        throw new Error(
+          "Форма не подключена к серверу. Настройте Google Apps Script (см. GOOGLE-FORM-SETUP.md) и укажите URL в config.js"
+        );
+      }
+
+      if (!response.ok || !result?.ok) {
+        throw new Error(result?.error || "Не удалось отправить заявку");
+      }
     }
 
     form.hidden = true;
     successBlock.hidden = false;
     successBlock.scrollIntoView({ behavior: "smooth", block: "center" });
   } catch (error) {
-    showFormError(
+    const message =
       error.message === "Failed to fetch"
         ? "Не удалось отправить заявку. Проверьте интернет или попробуйте позже."
-        : error.message
-    );
+        : error.message;
+
+    showFormError(message);
     submitBtn.disabled = false;
     submitBtn.textContent = defaultBtnText;
   }
