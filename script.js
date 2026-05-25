@@ -97,46 +97,12 @@ function validateForm(data) {
 }
 
 function submitViaGoogleScript(endpoint, data) {
-  return new Promise((resolve, reject) => {
-    const iframeName = "gas-form-frame";
-    let iframe = document.querySelector(`iframe[name="${iframeName}"]`);
-
-    if (!iframe) {
-      iframe = document.createElement("iframe");
-      iframe.name = iframeName;
-      iframe.hidden = true;
-      document.body.appendChild(iframe);
-    }
-
-    const hiddenForm = document.createElement("form");
-    hiddenForm.method = "POST";
-    hiddenForm.action = endpoint;
-    hiddenForm.target = iframeName;
-    hiddenForm.style.display = "none";
-
-    const payloadInput = document.createElement("input");
-    payloadInput.type = "hidden";
-    payloadInput.name = "payload";
-    payloadInput.value = JSON.stringify(data);
-    hiddenForm.appendChild(payloadInput);
-
-    const timeoutId = window.setTimeout(() => {
-      cleanup();
-      resolve();
-    }, 4000);
-
-    function cleanup() {
-      window.clearTimeout(timeoutId);
-      hiddenForm.remove();
-    }
-
-    iframe.addEventListener("load", () => {
-      cleanup();
-      resolve();
-    }, { once: true });
-
-    document.body.appendChild(hiddenForm);
-    hiddenForm.submit();
+  // POST доходит до Google Script; ответ браузер может не прочитать (CORS) — это нормально
+  return fetch(endpoint, {
+    method: "POST",
+    redirect: "follow",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(data),
   });
 }
 
@@ -159,33 +125,15 @@ form?.addEventListener("submit", async (event) => {
   submitBtn.textContent = "Отправка...";
 
   try {
-    const endpoint = window.FORM_ENDPOINT || "/api/submit";
-    const useGoogleScript = Boolean(window.FORM_ENDPOINT);
+    const endpoint = window.FORM_ENDPOINT || "";
 
-    if (useGoogleScript) {
-      await submitViaGoogleScript(endpoint, data);
-    } else {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-
-      const raw = await response.text();
-      let result = null;
-
-      try {
-        result = raw ? JSON.parse(raw) : null;
-      } catch {
-        throw new Error(
-          "Форма не подключена к серверу. Настройте Google Apps Script (см. GOOGLE-FORM-SETUP.md) и укажите URL в config.js"
-        );
-      }
-
-      if (!response.ok || !result?.ok) {
-        throw new Error(result?.error || "Не удалось отправить заявку");
-      }
+    if (!endpoint) {
+      throw new Error(
+        "Не подключён Google Script. Откройте ваш-сайт.pages.dev/config.js — там должен быть URL. Если пусто, загрузите config.js на GitHub."
+      );
     }
+
+    await submitViaGoogleScript(endpoint, data);
 
     form.hidden = true;
     successBlock.hidden = false;
